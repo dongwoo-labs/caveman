@@ -1,5 +1,6 @@
 ---
 name: cavecrew
+disable-model-invocation: true
 description: >
   When to delegate to `cavecrew-investigator` (locate code), `cavecrew-builder`
   (1-2 file edit) or `cavecrew-reviewer` (diff review) instead of working inline
