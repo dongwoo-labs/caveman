@@ -99,7 +99,7 @@ const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.cla
 
 // candidate-p2: only the lite reinforcement remains.
 const REINFORCEMENT_RULES = {
-  lite: 'No filler, hedging, or pleasantries. Keep articles and full sentences OK, but stay tight.',
+  lite: 'Cut redundant wording and rote greetings only. Keep uncertainty, negation/exceptions, verification status, and needed progress updates. Keep complete sentences and the user\'s language.',
 };
 
 function reinforcementForMode(mode) {
