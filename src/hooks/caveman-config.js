@@ -23,17 +23,17 @@
 //      - $XDG_CONFIG_HOME/caveman/config.json (any platform, if set)
 //      - ~/.config/caveman/config.json (macOS / Linux fallback)
 //      - %APPDATA%\caveman\config.json (Windows fallback)
-//   4. 'full'
+//   4. 'off'
+//
+// candidate-p2 (DONGWOO-2104 minimal fork): VALID_MODES reduced to off/lite
+// only. full/ultra/wenyan*/commit/review/compress are not supported by this
+// candidate — the writer guard below rejects any other value.
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const VALID_MODES = [
-  'off', 'lite', 'full', 'ultra',
-  'wenyan-lite', 'wenyan', 'wenyan-full', 'wenyan-ultra',
-  'commit', 'review', 'compress'
-];
+const VALID_MODES = ['off', 'lite'];
 
 // Legacy machine-wide flag. Kept as a last-write-wins MIRROR of whichever
 // session wrote most recently, because INSTALL.md tells users to `cat` it and
@@ -133,8 +133,8 @@ function getDefaultMode(startDir) {
   const userMode = readModeFromConfigFile(getConfigPath());
   if (userMode) return userMode;
 
-  // 4. Default
-  return 'full';
+  // 4. Default — candidate-p2 built-in fallback is 'off', not upstream 'full'.
+  return 'off';
 }
 
 // Symlink-safe flag file write.
@@ -165,6 +165,9 @@ function sleepMs(ms) {
   } catch (e) { /* SharedArrayBuffer unavailable — skip the backoff */ }
 }
 
+// candidate-p2: returns true only when the rename actually landed, false on
+// every refusal/failure path. Callers (activate.js) use this to avoid
+// reporting a mode change as active when the write never happened.
 function safeWriteFlag(flagPath, content) {
   const debug = process.env.CAVEMAN_DEBUG === '1';
   try {
@@ -182,12 +185,12 @@ function safeWriteFlag(flagPath, content) {
         const realStat = fs.statSync(realFlagDir);
         if (!realStat.isDirectory()) {
           if (debug) process.stderr.write(`[caveman] safeWriteFlag: symlink target ${realFlagDir} is not a directory\n`);
-          return;
+          return false;
         }
         if (typeof process.getuid === 'function') {
           if (realStat.uid !== process.getuid()) {
             if (debug) process.stderr.write(`[caveman] safeWriteFlag: symlink target ${realFlagDir} owned by uid ${realStat.uid}, not current user ${process.getuid()}\n`);
-            return;
+            return false;
           }
         } else {
           // The home-prefix check used to live here, comparing the resolved
@@ -202,22 +205,22 @@ function safeWriteFlag(flagPath, content) {
             fs.accessSync(realFlagDir, fs.constants.W_OK);
           } catch (e) {
             if (debug) process.stderr.write(`[caveman] safeWriteFlag: symlink target ${realFlagDir} is not writable by current user\n`);
-            return;
+            return false;
           }
         }
       } else {
         realFlagDir = flagDir;
       }
     } catch (e) {
-      return;
+      return false;
     }
 
     // The flag file itself must never be a symlink (that's the actual clobber vector).
     const realFlagPath = path.join(realFlagDir, path.basename(flagPath));
     try {
-      if (fs.lstatSync(realFlagPath).isSymbolicLink()) return;
+      if (fs.lstatSync(realFlagPath).isSymbolicLink()) return false;
     } catch (e) {
-      if (e.code !== 'ENOENT') return;
+      if (e.code !== 'ENOENT') return false;
     }
 
     // tempPath is hoisted above the try so the finally below can always find
@@ -227,6 +230,7 @@ function safeWriteFlag(flagPath, content) {
     // without the retry + guaranteed cleanup here, every such miss left an
     // orphaned .caveman-active.<pid>.<ts> file behind (#511/#578/#657).
     let tempPath;
+    let renamed = false;
     try {
       tempPath = path.join(realFlagDir, `.caveman-active.${process.pid}.${Date.now()}`);
       const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
@@ -247,7 +251,6 @@ function safeWriteFlag(flagPath, content) {
       // two — effectively one attempt with two extra syscalls. Sleep for real:
       // Atomics.wait blocks this thread without pulling in a child process,
       // which is what a hook budget can least afford.
-      let renamed = false;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           fs.renameSync(tempPath, realFlagPath);
@@ -274,8 +277,10 @@ function safeWriteFlag(flagPath, content) {
         }
       }
     }
+    return renamed;
   } catch (e) {
     // Silent fail — flag is best-effort
+    return false;
   }
 }
 
@@ -523,13 +528,15 @@ function offToNull(mode) {
 
 // "What mode is in effect right now" — for every reader (per-turn
 // reinforcement gate, ruleset re-emission, statusline, stats).
+//
+// candidate-p2: NO legacy fallback. A session with no session_id or no
+// session file is 'off' — behavioral state has exactly one key, a valid
+// session_id, per DONGWOO-2104's session-state contract. The machine-wide
+// legacy flag is never read.
 function resolveActiveMode(claudeDir, sessionId) {
   const sessionPath = sessionActivePath(claudeDir, sessionId);
-  if (sessionPath) {
-    const stored = readFlag(sessionPath);
-    if (stored !== null) return offToNull(stored);
-  }
-  return offToNull(readFlag(legacyFlagPath(claudeDir)));
+  if (!sessionPath) return null;
+  return offToNull(readFlag(sessionPath));
 }
 
 // "What is literally written for THIS session" — no legacy fallback, and 'off'
@@ -538,72 +545,36 @@ function resolveActiveMode(claudeDir, sessionId) {
 // session wrote last and spam the log with phantom transitions) and the
 // SessionStart continuation branch, which has to tell "this session chose off"
 // apart from "this session has no state yet".
+//
+// candidate-p2: an invalid/missing session_id returns null (never the legacy
+// flag) — the caller treats null as "nothing stored yet" and re-derives the
+// default, which is 'off' in this candidate.
 function readSessionModeRaw(claudeDir, sessionId) {
   const sessionPath = sessionActivePath(claudeDir, sessionId);
-  if (!sessionPath) return readFlag(legacyFlagPath(claudeDir));
+  if (!sessionPath) return null;
   return readFlag(sessionPath);
 }
 
 // Single writer for the active mode. Pass null (or 'off') to deactivate.
+// Returns true when the session file was actually written, false otherwise
+// (including: no valid session_id, in which case nothing is written at all).
 //
-// The session file stores 'off' literally — that is what makes deactivation
-// durable across SessionStart. The legacy mirror instead gets UNLINKED, and
-// never holds the literal 'off', on purpose: 'off' is already in VALID_MODES,
-// so an older caveman-mode-tracker.js reading it from the legacy path would
-// clear its !INDEPENDENT_MODES check and inject "CAVEMAN MODE ACTIVE (off)",
-// and an older caveman-statusline.sh would render [CAVEMAN:OFF] instead of
-// staying silent. Mixed-version installs are real — plugin hooks and
-// standalone hooks can both be registered, and settings.json holds a
-// statusline path baked in at install time.
+// candidate-p2: the legacy machine-wide mirror is never written or deleted.
+// A session with no valid session_id writes nothing — fail-closed, not a
+// machine-wide fallback.
 function writeSessionMode(claudeDir, sessionId, modeOrNull) {
   const canonical = (!modeOrNull || modeOrNull === 'off') ? 'off' : modeOrNull;
-  if (!VALID_MODES.includes(canonical)) return;
+  if (!VALID_MODES.includes(canonical)) return false;
 
   const sessionPath = sessionActivePath(claudeDir, sessionId);
-  if (sessionPath) safeWriteFlag(sessionPath, canonical);
-
-  const legacy = legacyFlagPath(claudeDir);
-  if (canonical === 'off') {
-    safeDeleteFlag(legacy);
-  } else {
-    safeWriteFlag(legacy, canonical);
-  }
+  if (!sessionPath) return false;
+  return safeWriteFlag(sessionPath, canonical);
 }
 
-// Displaced-prose-mode memory for one-shot independent modes (#599), scoped to
-// the session. Without the scoping, two windows each running /caveman-commit
-// would overwrite each other's "where to return to".
-//
-// Unlike the active mode, prev is stored in EXACTLY ONE place — the session
-// file when there is a valid session id, the legacy file otherwise. It is not
-// mirrored, and the read/clear helpers must not cross that line either.
-//
-// Falling back to the legacy prev whenever a session simply has none of its own
-// is a real bug, not a convenience: a session where caveman was never on saves
-// no prev (there is nothing to displace), so after /caveman-commit it would
-// restore from whatever stale machine-wide prev another context left behind and
-// switch itself on at that mode. Symmetrically, clearing must not reach across
-// and delete machine-wide state on behalf of one session.
-function writeSessionPrev(claudeDir, sessionId, mode) {
-  if (!mode || !VALID_MODES.includes(mode)) return;
-  const p = sessionPrevPath(claudeDir, sessionId) || path.join(claudeDir, PREV_BASENAME);
-  safeWriteFlag(p, mode);
-}
-
-function readSessionPrev(claudeDir, sessionId) {
-  const p = sessionPrevPath(claudeDir, sessionId);
-  if (p) return readFlag(p);
-  return readFlag(path.join(claudeDir, PREV_BASENAME));
-}
-
-function clearSessionPrev(claudeDir, sessionId) {
-  const p = sessionPrevPath(claudeDir, sessionId);
-  if (p) {
-    safeDeleteFlag(p);
-    return;
-  }
-  safeDeleteFlag(path.join(claudeDir, PREV_BASENAME));
-}
+// candidate-p2: the upstream "displaced-prose-mode memory for one-shot
+// independent modes" (#599, writeSessionPrev/readSessionPrev/clearSessionPrev)
+// is removed — this candidate has no independent modes (commit/review/
+// compress) to displace anything, so the .prev file is never created.
 
 // Sweep stale per-session files. Called from SessionStart on a genuinely new
 // session only — not on every compaction, which is frequent in a long session
@@ -612,6 +583,11 @@ function clearSessionPrev(claudeDir, sessionId) {
 // maxDeletes caps the first sweep on a machine that already accumulated many
 // sessions. TTL is overridable via env so tests need not fake two weeks.
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+// candidate-p2: only files matching exactly <valid-session-id>.mode are GC
+// candidates — anything else (a `.prev` this candidate no longer writes, a
+// stray file, a directory, a symlink) is left untouched.
+const SESSION_MODE_FILE_RE = /^[A-Za-z0-9_-]{1,128}\.mode$/;
 
 function gcSessionStore(claudeDir, opts) {
   const options = opts || {};
@@ -627,6 +603,7 @@ function gcSessionStore(claudeDir, opts) {
     let deleted = 0;
     for (const name of entries) {
       if (deleted >= maxDeletes) break;
+      if (!SESSION_MODE_FILE_RE.test(name)) continue;
       const p = path.join(dir, name);
       try {
         const st = fs.lstatSync(p);
@@ -795,16 +772,20 @@ function rulesetBanner(mode) {
   return 'CAVEMAN MODE ACTIVE — level: ' + canonicalModeLabel(mode);
 }
 
+// candidate-p2: legacyFlagPath/sessionPrevPath/FLAG_BASENAME/PREV_BASENAME
+// are kept defined (dead code, unused by any hook) only because removing them
+// would require also pruning their definitions above for no behavioral
+// change — they are deliberately left OUT of this export list so no caller
+// can reach for the legacy machine-wide path again by accident.
 module.exports = {
   getDefaultMode, getConfigDir, getConfigPath, findRepoConfigPath, VALID_MODES,
   safeWriteFlag, safeDeleteFlag, readFlag, appendFlag, readHistory,
   recordModeChange, MODE_LOG_BASENAME,
   // Per-session state
-  SESSIONS_DIRNAME, FLAG_BASENAME, PREV_BASENAME,
-  validateSessionId, legacyFlagPath, sessionsDir,
-  sessionActivePath, sessionPrevPath,
+  SESSIONS_DIRNAME,
+  validateSessionId, sessionsDir,
+  sessionActivePath,
   resolveActiveMode, readSessionModeRaw, writeSessionMode,
-  writeSessionPrev, readSessionPrev, clearSessionPrev,
   gcSessionStore,
   // Ruleset injection
   canonicalModeLabel, loadFilteredRuleset, rulesetBanner,
