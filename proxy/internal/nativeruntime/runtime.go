@@ -924,9 +924,6 @@ func (r *Runtime) ensureTaskContract(request Request) (string, error) {
 	if !emitPolicy {
 		return "", nil
 	}
-	if selectedPolicy == "core" && current == nil {
-		return "", nil
-	}
 	return taskContractContext(taskType), nil
 }
 
