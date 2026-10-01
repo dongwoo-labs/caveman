@@ -1,14 +1,21 @@
 #!/usr/bin/env node
 // caveman — Claude Code SessionStart activation hook
 //
+// candidate-p2 (DONGWOO-2104 minimal fork of dongwoo-labs/caveman@v2.7.0-labs.1):
+//   - Only 'off' and 'lite' are supported modes (see caveman-config.js VALID_MODES).
+//   - No legacy machine-wide fallback: a session with no valid session_id gets
+//     no state read, no state write, no style output — fail-closed 'off'.
+//   - No cavecrew model-override invocation, no statusline nudge, no stats.
+//   - Built-in default mode is 'off' (upstream default is 'full').
+//
 // Runs on every session start:
-//   1. Resolves THIS session's mode and persists it (statusline reads it)
-//   2. Emits caveman ruleset as hidden SessionStart context
-//   3. Detects missing statusline config and emits setup nudge
+//   1. Resolves THIS session's mode and persists it
+//   2. Emits caveman ruleset as hidden SessionStart context (lite only)
 //
 // Mode state is per session, not per machine — see the "Per-session mode state"
-// block in caveman-config.js. The payload's session_id scopes every read and
-// write below; an absent or malformed one degrades to the old machine-wide flag.
+// block in caveman-config.js. A session_id that is absent or fails validation
+// never reads or writes any state (fail-closed 'off'), it does NOT degrade to
+// a machine-wide flag.
 
 const fs = require('fs');
 const path = require('path');
@@ -67,12 +74,8 @@ function requireSibling(name, isUsable) {
 }
 
 // Hand-copy of caveman-config.js VALID_MODES, used only when that module is
-// unavailable. tests/test_hook_missing_sibling.js asserts the two stay equal.
-const FALLBACK_VALID_MODES = [
-  'off', 'lite', 'full', 'ultra',
-  'wenyan-lite', 'wenyan', 'wenyan-full', 'wenyan-ultra',
-  'commit', 'review', 'compress'
-];
+// unavailable. candidate-p2 reduces this to off/lite, matching the real module.
+const FALLBACK_VALID_MODES = ['off', 'lite'];
 
 // Minimal stand-in for caveman-config.getDefaultMode. It must mirror the real
 // resolution order rather than read only the env var: a degrade that ignores a
@@ -118,8 +121,9 @@ function fallbackGetDefaultMode(startDir) {
       dir = parent;
     }
   } catch (e) { /* fall through to user config */ }
-  // 3. User config, then 4. the built-in default.
-  return fallbackReadMode(fallbackUserConfigPath()) || 'full';
+  // 3. User config, then 4. the built-in default — candidate-p2's fallback
+  //    default is 'off', not upstream 'full'.
+  return fallbackReadMode(fallbackUserConfigPath()) || 'off';
 }
 
 // Degraded stubs keep the rest of this hook working when the config module is
@@ -131,78 +135,52 @@ const cavemanConfig = requireSibling('caveman-config', (m) =>
     && typeof m.recordModeChange === 'function' && typeof m.readFlag === 'function'
     && Array.isArray(m.VALID_MODES));
 
-const { getDefaultMode, safeWriteFlag, recordModeChange, readFlag, VALID_MODES } = cavemanConfig || {
+const { getDefaultMode, recordModeChange, VALID_MODES } = cavemanConfig || {
   getDefaultMode: fallbackGetDefaultMode,
-  safeWriteFlag: () => {},
   recordModeChange: () => {},
-  readFlag: () => null,
   VALID_MODES: FALLBACK_VALID_MODES,
 };
 
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
-const flagPath = path.join(claudeDir, '.caveman-active');
-const settingsPath = path.join(claudeDir, 'settings.json');
-
-function removeFlag(target) {
-  try {
-    fs.unlinkSync(target);
-  } catch (error) {
-    if (process.env.CAVEMAN_DEBUG === '1' && error.code !== 'ENOENT') {
-      console.error(`caveman: failed to remove flag ${target}: ${error.message}`);
-    }
-  }
-}
 
 // The per-session helpers are resolved INDIVIDUALLY rather than folded into the
 // requireSibling shape check above. A caveman-config.js from before per-session
 // state loads fine and exports everything that check demands, so failing the
-// whole module over the newer exports would trade "machine-wide mode, as it
-// always worked" for "no flag write at all" — a strictly worse degrade on the
-// exact plugin-cache-drift scenario #848 is about. Each stub below reproduces
-// the pre-per-session behavior instead.
+// whole module over the newer exports would trade "no mode at all" for
+// something worse. candidate-p2's stand-ins below are all fail-closed (no
+// legacy flag of any kind) rather than degrading to a machine-wide file.
 const cfg = cavemanConfig || {};
 const validateSessionId = cfg.validateSessionId || (() => null);
 const gcSessionStore = cfg.gcSessionStore || (() => 0);
-// Literal read of THIS session's state, 'off' included. Degrades to the legacy
-// flag, which is exactly what the pre-per-session hook read.
-const readSessionModeRaw = cfg.readSessionModeRaw || (() => readFlag(flagPath));
-const writeSessionMode = cfg.writeSessionMode || ((dir, sid, modeOrNull) => {
-  if (!modeOrNull || modeOrNull === 'off') removeFlag(flagPath);
-  else safeWriteFlag(flagPath, modeOrNull);
-});
-const legacyFlagPath = cfg.legacyFlagPath || (() => flagPath);
-
-// Apply per-agent model overrides from env vars before emitting rules.
-// Best-effort: any error is swallowed so SessionStart is never blocked.
-try {
-  const { applyOverrides, resolvePluginRoot } = require('./cavecrew-model-overrides');
-  applyOverrides(resolvePluginRoot(__dirname));
-} catch (e) {}
+// Literal read of THIS session's state, 'off' included. candidate-p2: no
+// legacy-flag degrade — an unusable config module means no state at all.
+const readSessionModeRaw = cfg.readSessionModeRaw || (() => null);
+// candidate-p2: writeSessionMode returns a boolean (true = actually written).
+const writeSessionMode = cfg.writeSessionMode || (() => false);
 
 // SessionStart re-fires mid-conversation (resume, /clear, context compaction),
 // not just at true session start. Re-firing must not clobber a mode the user
 // switched to mid-session (#691): branch on the hook payload's `source` field —
-// only a real `startup` (or an explicit /clear, see RESET_SOURCES) resets to the
-// configured default; resume/compact/fork preserve this session's stored mode.
+// only a real `startup` resets to the configured default, an explicit `clear`
+// always resets to 'off' (DONGWOO-2104 contract — NOT getDefaultMode), and
+// resume/compact/fork preserve this session's stored mode.
 //
 // With per-session storage the branch also has to preserve a durable `off`.
-// #691 could not: it read the legacy flag, where "off" is spelled "no file", so
-// a deactivated session found nothing stored and fell straight back to
-// getDefaultMode() — the "stop caveman, then /compact" hole. The continuation
-// branch below therefore reads the LITERAL stored value, not the collapsed one.
-// Payload arrival is EVENT-DRIVEN, and activation runs on the first COMPLETE
-// JSON object rather than at EOF. The host writes one object and closes, but
-// under the Windows pipe implementation that close can lag arbitrarily
-// (#729/#833). A synchronous `readFileSync(0)` blocks inside the read syscall
-// until EOF — no deadline can interrupt it — so a lagging close spent this
-// hook's entire 5s budget and the host killed it before the flag was written or
-// the ruleset emitted. caveman-mode-tracker.js was fixed this way; its sibling
-// was not, and SessionStart is the one that actually has work to do.
+// The continuation branch below therefore reads the LITERAL stored value, not
+// the collapsed one. Payload arrival is EVENT-DRIVEN, and activation runs on
+// the first COMPLETE JSON object rather than at EOF. The host writes one
+// object and closes, but under the Windows pipe implementation that close can
+// lag arbitrarily (#729/#833). A synchronous `readFileSync(0)` blocks inside
+// the read syscall until EOF — no deadline can interrupt it — so a lagging
+// close spent this hook's entire 5s budget and the host killed it before the
+// flag was written or the ruleset emitted. caveman-mode-tracker.js was fixed
+// this way; its sibling was not, and SessionStart is the one that actually has
+// work to do.
 //
 // A watchdog covers the case where the payload never completes at all: activate
 // well inside the budget instead of forfeiting the session. It must NOT assume
 // `startup` — that is the one source that resets the mode, so a slow payload on
-// a `compact`/`resume` event would silently drop a user's mid-session `ultra`
+// a `compact`/`resume` event would silently drop a user's mid-session mode
 // back to the default (#691 through the timeout door). An unknown source
 // preserves a valid existing flag. The deadline sits well below the host's 5s
 // budget but far enough above a cold Windows/AV start to be reached rarely.
@@ -211,37 +189,43 @@ const PAYLOAD_WATCHDOG_MS = 2000;
 // Sources that re-derive the configured default instead of reading what this
 // session already stored.
 //
-// `startup` is a genuinely new session. `clear` is here — unlike in #691's
-// flag-only world — because /clear is an explicit user reset of the
-// conversation, and per-session storage makes that distinction cheap: nothing
-// else in the session survives /clear, so neither should a "stop caveman" from
-// before it. Everything else (compact, resume, fork, an unrecognized source,
-// and the watchdog's 'unknown') reads instead of re-deriving.
+// `startup` is a genuinely new session. `clear` is here too — /clear is an
+// explicit user reset of the conversation — but see RESET_TO_OFF_SOURCES
+// below: clear does NOT re-derive the configured default, it hard-resets to
+// 'off'. Everything else (compact, resume, fork, an unrecognized source, and
+// the watchdog's 'unknown') reads instead of re-deriving.
 const RESET_SOURCES = new Set(['startup', 'clear']);
+// Of the RESET_SOURCES, `clear` forces 'off' rather than re-deriving the
+// configured default (DONGWOO-2104 session-state contract: "/clear: 해당
+// session을 off로 reset한다"). `startup` is the only source that still
+// consults getDefaultMode().
+const RESET_TO_OFF_SOURCES = new Set(['clear']);
 
+// candidate-p2: payload bytes that fail to parse as JSON are an error input,
+// not "no payload". Per the DONGWOO-2104 error-fixture contract (invalid JSON
+// stdin → exit 0, bounded stderr, no style output, no state change), this
+// aborts BEFORE run() — no default resolution, no GC, no state write. A
+// genuinely empty payload (manual TTY invocation) is not an error and still
+// proceeds as a real startup.
 function activate(payload, timedOut) {
-  // Unknown, not startup: we never saw the payload, so we cannot claim to know
-  // what kind of session event this was — and 'unknown' must not reset, or a
-  // slow payload on a compact would drop a mid-session ultra (#691 through the
-  // timeout door) and re-arm a session the user turned off.
-  let source = timedOut ? 'unknown' : 'startup';
-  // The session's cwd, which is not necessarily this hook process's cwd. The
-  // repo-local config walk must start there or a checked-in .caveman.json
-  // (including `defaultMode: "off"`, a project opting out) is missed — the same
-  // #634 bug already fixed in caveman-mode-tracker.js.
-  let sessionCwd;
-  // Scopes every mode read/write to this window. null when absent or malformed,
-  // in which case the config helpers fall back to the legacy machine-wide flag.
-  let sessionId = null;
-  try {
-    if (payload) {
-      const data = JSON.parse(payload);
-      if (data && typeof data.source === 'string') source = data.source;
-      if (data && typeof data.cwd === 'string') sessionCwd = data.cwd;
-      if (data) sessionId = validateSessionId(data.session_id);
+  if (payload) {
+    let data;
+    try {
+      data = JSON.parse(payload);
+    } catch (e) {
+      process.stderr.write('caveman: invalid SessionStart payload JSON — no state change.\n');
+      process.exit(0);
+      return;
     }
-  } catch (e) { /* no/bad stdin → treat as startup */ }
-  run(source, sessionCwd, sessionId);
+    const source = (data && typeof data.source === 'string') ? data.source : (timedOut ? 'unknown' : 'startup');
+    const sessionCwd = (data && typeof data.cwd === 'string') ? data.cwd : undefined;
+    const sessionId = data ? validateSessionId(data.session_id) : null;
+    run(source, sessionCwd, sessionId);
+    return;
+  }
+  // No payload at all (manual/TTY invocation, or a watchdog timeout with zero
+  // bytes received) — treat as a genuine startup with no session scoping.
+  run(timedOut ? 'unknown' : 'startup', undefined, null);
 }
 
 if (process.stdin.isTTY) {
@@ -284,20 +268,20 @@ if (process.stdin.isTTY) {
 function run(source, sessionCwd, sessionId) {
 let mode;
 if (RESET_SOURCES.has(source)) {
-  mode = getDefaultMode(sessionCwd);
+  if (RESET_TO_OFF_SOURCES.has(source)) {
+    mode = 'off';
+  } else {
+    mode = getDefaultMode(sessionCwd);
+  }
   // Sweep stale per-session files only when a session genuinely begins, not on
   // every compaction — those are frequent in a long session and this walks a
   // directory inside a 5s hook budget.
   gcSessionStore(claudeDir);
 } else {
   // Continuation: read, never re-derive. The LITERAL value, so a stored 'off'
-  // is distinguishable from "nothing stored yet".
-  let stored = readSessionModeRaw(claudeDir, sessionId);
-  // Upgrade path: a session that began before per-session state exists only in
-  // the legacy mirror. Falling through to the default there would re-derive on
-  // the very compaction #691 fixed. The mirror never holds the literal 'off',
-  // so this can only ever supply a real mode.
-  if (stored === null) stored = readFlag(legacyFlagPath(claudeDir));
+  // is distinguishable from "nothing stored yet". candidate-p2: no legacy
+  // mirror to fall back to — a session with no file here has no mode.
+  const stored = readSessionModeRaw(claudeDir, sessionId);
   if (stored && VALID_MODES.includes(stored)) {
     mode = stored;
   } else {
@@ -307,49 +291,31 @@ if (RESET_SOURCES.has(source)) {
   }
 }
 
-// "off" mode — skip activation entirely, don't emit rules. The state is still
-// written so the choice survives this session's later compactions: that write
-// is what closes the "stop caveman → /compact re-arms caveman" hole, because
-// the next SessionStart finds a durable 'off' instead of an absent file.
+// "off" mode — skip activation entirely, no stdout bytes at all (DONGWOO-2104:
+// "off: stdout 0 bytes / additionalContext 없음"). The state is still written
+// (best-effort) so the choice survives this session's later compactions.
 if (mode === 'off') {
   recordModeChange(claudeDir, null, sessionId); // #601: timestamped transition log
   writeSessionMode(claudeDir, sessionId, null);
-  process.stdout.write('OK');
   process.exit(0);
 }
 
-// 1. Persist this session's mode (symlink-safe, mirrored to the legacy flag)
+// 1. Persist this session's mode (symlink-safe). candidate-p2 has no legacy
+//    mirror to write. writeSessionMode returns false when nothing was
+//    actually written (no valid session_id, or the write failed) — in that
+//    case we must not report the mode as active (no ruleset emitted), so a
+//    write failure never looks like a successful activation.
 recordModeChange(claudeDir, mode, sessionId); // #601
-writeSessionMode(claudeDir, sessionId, mode);
+const persisted = writeSessionMode(claudeDir, sessionId, mode);
+if (!persisted) {
+  process.exit(0);
+}
 
-// 2. Emit full caveman ruleset, filtered to the active intensity level.
-//    The old 2-sentence summary was too weak — models drifted back to verbose
-//    mid-conversation, especially after context compression pruned it away.
-//    Full rules with examples anchor behavior much more reliably.
-//
+// 2. Emit the lite ruleset (the only non-off mode in this candidate), filtered
+//    from SKILL.md — the single source of truth for caveman behavior.
 //    Reads SKILL.md at runtime so edits to the source of truth propagate
 //    automatically — no hardcoded duplication to go stale.
-
-// Modes that have their own independent skill files — not caveman intensity levels.
-// For these, emit a short activation line; the skill itself handles behavior.
-const INDEPENDENT_MODES = new Set(['commit', 'review', 'compress']);
-
-if (INDEPENDENT_MODES.has(mode)) {
-  process.stdout.write('CAVEMAN MODE ACTIVE — level: ' + mode + '. Behavior defined by /caveman-' + mode + ' skill.');
-  process.exit(0);
-}
-
-// Resolve the canonical label for wenyan alias, and read SKILL.md — the single
-// source of truth for caveman behavior, filtered to this level's intensity row.
-//
-// Both live in caveman-config.js so caveman-mode-tracker.js can inject the SAME
-// ruleset when the user switches level mid-session (#975). Each is resolved
-// individually against a local stand-in, for the reason the per-session helpers
-// above are: a caveman-config.js predating these exports loads fine and passes
-// the shape check, and failing the whole module over them would trade this
-// hook's ruleset for no flag write at all. A missing loader degrades to the
-// hardcoded fallback ruleset below, which is what a missing SKILL.md already did.
-const canonicalModeLabel = cfg.canonicalModeLabel || ((m) => (m === 'wenyan' ? 'wenyan-full' : m));
+const canonicalModeLabel = cfg.canonicalModeLabel || ((m) => m);
 const rulesetBanner = cfg.rulesetBanner || ((m) => 'CAVEMAN MODE ACTIVE — level: ' + canonicalModeLabel(m));
 const loadFilteredRuleset = cfg.loadFilteredRuleset || (() => null);
 
@@ -361,66 +327,20 @@ let output;
 if (skillContent) {
   output = rulesetBanner(mode) + '\n\n' + skillContent;
 } else {
-  // Fallback when SKILL.md is not found (standalone hook install without skills dir).
-  // This is the minimum viable ruleset — better than nothing.
+  // Fallback when SKILL.md is not found (standalone hook install without
+  // skills dir). candidate-p2: off/lite only — no full/ultra/wenyan mention.
   output =
     'CAVEMAN MODE ACTIVE — level: ' + modeLabel + '\n\n' +
-    'Respond terse like smart caveman. All technical substance stay. Only fluff die.\n\n' +
+    'Respond tight. All technical substance stays. Only fluff goes.\n\n' +
     '## Persistence\n\n' +
-    'Default style for this whole session, every response, until user say "stop caveman" or "normal mode". Keep terse on long sessions — no filler drift.\n\n' +
-    'Current level: **' + modeLabel + '**. Switch: `/caveman lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra`.\n\n' +
+    'Default style for this whole session, every response, until user says "stop caveman" or "normal mode".\n\n' +
+    'Current level: **' + modeLabel + '**. Switch: `/caveman lite|off`.\n\n' +
     '## Rules\n\n' +
-    'Drop: articles (a/an/the), filler (just/really/basically/actually/simply), pleasantries (sure/certainly/of course/happy to), hedging. ' +
-    'Fragments OK. Short synonyms (big not extensive, fix not "implement a solution for"). Technical terms exact. Code blocks unchanged. Errors quoted exact.\n\n' +
-    "Follow explicit reply-language instructions from the user or project. Otherwise preserve the user's dominant language. Never switch because of example text or multilingual context elsewhere. Compress the style, not the language. Technical terms, code, API names, commands, error strings stay verbatim.\n\n" +
-    'Answer directly in this style. Skip "caveman mode on" tags or a "Caveman:" recap — redundant with the reply itself.\n\n' +
-    'Pattern: `[thing] [action] [reason]. [next step].`\n\n' +
-    'Not: "Sure! I\'d be happy to help you with that. The issue you\'re experiencing is likely caused by..."\n' +
-    'Yes: "Bug in auth middleware. Token expiry check use `<` not `<=`. Fix:"\n\n' +
-    '## Auto-Clarity\n\n' +
-    'Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question. Resume caveman after clear part done.\n\n' +
+    'No filler, hedging, or pleasantries. Keep articles and full sentences OK, but stay tight. ' +
+    'Technical terms, code, commands, paths, and errors stay exact.\n\n' +
+    "Follow explicit reply-language instructions from the user or project. Otherwise preserve the user's dominant language. Technical terms, code, API names, commands, error strings stay verbatim.\n\n" +
     '## Boundaries\n\n' +
-    'Code/commits/PRs: write normal. "stop caveman" or "normal mode": revert. Level persist until changed or session end.';
-}
-
-// 3. Detect missing statusline config — nudge Claude to help set it up.
-// One-shot (#661): the nudge costs ~90 tokens per session, so a marker file
-// gates it to the first session only. Users who declined stop paying for it.
-const nudgeMarkerPath = path.join(claudeDir, '.caveman-nudge-shown');
-try {
-  let hasStatusline = false;
-  if (fs.existsSync(settingsPath)) {
-    const rawSettings = fs.readFileSync(settingsPath, 'utf8');
-    try {
-      hasStatusline = !!JSON.parse(rawSettings).statusLine;
-    } catch (e) {
-      // JSONC (comments / trailing commas) is legal in settings.json and the
-      // hooks dir has no JSONC parser. Fall back to a substring probe and err
-      // toward NOT nudging: a spurious "set up your statusline" for a user who
-      // already has one is worse than a missing nudge.
-      hasStatusline = rawSettings.includes('"statusLine"');
-    }
-  }
-
-  if (!hasStatusline && !fs.existsSync(nudgeMarkerPath)) {
-    safeWriteFlag(nudgeMarkerPath, '1');
-    const isWindows = process.platform === 'win32';
-    const scriptName = isWindows ? 'caveman-statusline.ps1' : 'caveman-statusline.sh';
-    const scriptPath = path.join(__dirname, scriptName);
-    const command = isWindows
-      ? `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
-      : `bash "${scriptPath}"`;
-    const statusLineSnippet =
-      '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
-    output += "\n\n" +
-      "STATUSLINE SETUP NEEDED: The caveman plugin includes a statusline badge showing active mode " +
-      "(e.g. [CAVEMAN], [CAVEMAN:ULTRA]). It is not configured yet. " +
-      "To enable, add this to " + path.join(claudeDir, 'settings.json') + ": " +
-      statusLineSnippet + " " +
-      "Proactively offer to set this up for the user on first interaction.";
-  }
-} catch (e) {
-  // Silent fail — don't block session start over statusline detection
+    'Code/commits/PRs: write normal. "stop caveman" or "normal mode": revert. Level persists until changed or session end.';
 }
 
 process.stdout.write(output);

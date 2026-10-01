@@ -48,9 +48,11 @@ try {
 }
 const { VALID_MODES } = cavemanConfig;
 
-// Modes handled by their own slash commands (/caveman-commit, etc.) — not
-// selectable via /caveman <arg>.
-const INDEPENDENT_MODES = new Set(['commit', 'review', 'compress']);
+// candidate-p2 (DONGWOO-2104 minimal fork): off/lite only. Upstream's
+// independent modes (commit/review/compress) and other levels
+// (full/ultra/wenyan*) are not supported — see resolveModeArg below, which
+// resolves anything other than off/lite to 'unresolved' before any whitelist
+// check, not just after.
 
 // Natural-language triggers run over the whole prompt, so any pasted text that
 // merely QUOTES them fired them — a bug report quoting the /caveman-help card's
@@ -164,8 +166,15 @@ function normalizeModeArg(arg) {
 
 // Resolve a /caveman argument to a verdict. An argument that resolves to
 // nothing returns 'unresolved' rather than null, so the caller can say so
-// instead of failing silently. 'unresolved' is additive: applyModeChange in the
-// opencode plugin acts only on 'set'/'clear' and ignores anything else.
+// instead of failing silently.
+//
+// candidate-p2: the ONLY accepted non-clear value is the literal 'lite'. Every
+// other value — full, ultra, any wenyan* spelling, the upstream independent
+// modes (commit/review/compress), or anything not in VALID_MODES at all —
+// resolves to the same 'unresolved' verdict, checked BEFORE any VALID_MODES
+// lookup. This closes the path Astra's review found in the first draft: there
+// is no longer a branch that can return `{ action: 'set', mode: 'wenyan' }`
+// or an independent-mode verdict ahead of (or instead of) the whitelist.
 function resolveModeArg(rawArg, getDefaultMode) {
   const arg = normalizeModeArg(rawArg);
   if (!arg) {
@@ -178,15 +187,9 @@ function resolveModeArg(rawArg, getDefaultMode) {
     return mode === 'off' ? { action: 'clear' } : { action: 'set', mode };
   }
   if (arg === 'off' || arg === 'stop' || arg === 'disable') return { action: 'clear' };
-  // canonical alias — config stores wenyan-full as 'wenyan'
-  if (arg === 'wenyan-full') return { action: 'set', mode: 'wenyan' };
-  if (VALID_MODES.includes(arg) && !INDEPENDENT_MODES.has(arg)) return { action: 'set', mode: arg };
-  // An independent mode IS a real mode, just not reachable this way. Saying
-  // "not recognized" would deny a mode the user can see in the docs; name its
-  // own command instead. Echoing `arg` here is safe precisely because it
-  // matched this fixed whitelist — it is no longer free-form user text.
-  if (INDEPENDENT_MODES.has(arg)) return { action: 'unresolved', independentMode: arg };
-  // Bogus level: never silently overwrite with the default (#602). The
+  if (arg === 'lite') return { action: 'set', mode: 'lite' };
+  // Everything else — bogus level, full/ultra/wenyan*, or an upstream
+  // independent mode — is uniformly unrecognized in this candidate. The
   // rejected string is untrusted input and is deliberately NOT echoed back —
   // it would land in model context.
   return { action: 'unresolved' };
@@ -247,15 +250,8 @@ function parseModeChange(promptRaw, options) {
   // swallow the level, activating at the default instead (#602). Claude Code
   // prompts never take this shape, so gate behind expandedTpl (opencode-only).
   if (options.expandedTpl) {
-    if (/^generate a commit message for the current staged changes\b/.test(prompt)) {
-      return { action: 'set', mode: 'commit' };
-    }
-    if (/^review the current diff\b/.test(prompt)) {
-      return { action: 'set', mode: 'review' };
-    }
-    if (/^compress the file at:/.test(prompt)) {
-      return { action: 'set', mode: 'compress' };
-    }
+    // candidate-p2: the commit/review/compress independent-mode templates are
+    // not supported — fall through to the generic level template only.
     const tpl = /^activate caveman mode:[ \t]*(\S*)/.exec(firstLine);
     if (tpl) return resolveModeArg(tpl[1], getDefaultMode);
   }
@@ -282,23 +278,16 @@ function parseModeChange(promptRaw, options) {
     }
   }
 
-  // Match /caveman commands. Marketplace plugin installs surface commands
-  // namespaced as /caveman:caveman-<name> — accept both forms for every
-  // skill (#599: only compress and stats had the namespaced variant).
+  // Match /caveman commands. candidate-p2 only recognizes the base /caveman
+  // command (and its namespaced plugin form) — the commit/review/compress
+  // independent-mode commands are not part of this candidate, so a user
+  // typing them gets no response from this hook at all (the skill itself
+  // does not exist in the candidate package either).
   if (prompt.startsWith('/caveman')) {
     const parts = prompt.split(/\s+/);
-    const cmd = parts[0]; // /caveman, /caveman-commit, /caveman-review, etc.
+    const cmd = parts[0]; // /caveman, /caveman-commit, etc.
     const arg = parts[1] || '';
 
-    if (cmd === '/caveman-commit' || cmd === '/caveman:caveman-commit') {
-      return { action: 'set', mode: 'commit' };
-    }
-    if (cmd === '/caveman-review' || cmd === '/caveman:caveman-review') {
-      return { action: 'set', mode: 'review' };
-    }
-    if (cmd === '/caveman-compress' || cmd === '/caveman:caveman-compress') {
-      return { action: 'set', mode: 'compress' };
-    }
     if (cmd === '/caveman' || cmd === '/caveman:caveman') {
       // Bare /caveman → activate at configured default; otherwise resolve the
       // level (punctuation-tolerant, bogus values reported not swallowed).
@@ -309,4 +298,4 @@ function parseModeChange(promptRaw, options) {
   return null;
 }
 
-module.exports = { parseModeChange, INDEPENDENT_MODES };
+module.exports = { parseModeChange };
