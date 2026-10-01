@@ -128,16 +128,14 @@ function fallbackGetDefaultMode(startDir) {
 
 // Degraded stubs keep the rest of this hook working when the config module is
 // unusable: the session still gets its ruleset (read from SKILL.md, which does
-// not depend on the config module) and only flag persistence is lost — no flag
-// write, no mode log, readFlag() reports nothing active.
+// not depend on the config module) and only flag persistence is lost —
+// readFlag() reports nothing active.
 const cavemanConfig = requireSibling('caveman-config', (m) =>
   m && typeof m.getDefaultMode === 'function' && typeof m.safeWriteFlag === 'function'
-    && typeof m.recordModeChange === 'function' && typeof m.readFlag === 'function'
-    && Array.isArray(m.VALID_MODES));
+    && typeof m.readFlag === 'function' && Array.isArray(m.VALID_MODES));
 
-const { getDefaultMode, recordModeChange, VALID_MODES } = cavemanConfig || {
+const { getDefaultMode, VALID_MODES } = cavemanConfig || {
   getDefaultMode: fallbackGetDefaultMode,
-  recordModeChange: () => {},
   VALID_MODES: FALLBACK_VALID_MODES,
 };
 
@@ -158,12 +156,15 @@ const readSessionModeRaw = cfg.readSessionModeRaw || (() => null);
 // candidate-p2: writeSessionMode returns a boolean (true = actually written).
 const writeSessionMode = cfg.writeSessionMode || (() => false);
 
-// SessionStart re-fires mid-conversation (resume, /clear, context compaction),
-// not just at true session start. Re-firing must not clobber a mode the user
-// switched to mid-session (#691): branch on the hook payload's `source` field —
-// only a real `startup` resets to the configured default, an explicit `clear`
-// always resets to 'off' (DONGWOO-2104 contract — NOT getDefaultMode), and
-// resume/compact/fork preserve this session's stored mode.
+// SessionStart re-fires mid-conversation (resume, /clear, context compaction,
+// --fork-session), not just at true session start. Re-firing must not clobber
+// a mode the user switched to mid-session (#691): branch on the hook
+// payload's `source` field — only a real `startup` resets to the configured
+// default, an explicit `clear` always resets to 'off' (DONGWOO-2104 contract
+// — NOT getDefaultMode), `fork` always starts from 'off' unless its own new
+// session_id already has state (DONGWOO-2104 fork-isolation contract — never
+// inherits the parent's mode or the configured default), and resume/compact
+// preserve this session's stored mode.
 //
 // With per-session storage the branch also has to preserve a durable `off`.
 // The continuation branch below therefore reads the LITERAL stored value, not
@@ -192,8 +193,10 @@ const PAYLOAD_WATCHDOG_MS = 2000;
 // `startup` is a genuinely new session. `clear` is here too — /clear is an
 // explicit user reset of the conversation — but see RESET_TO_OFF_SOURCES
 // below: clear does NOT re-derive the configured default, it hard-resets to
-// 'off'. Everything else (compact, resume, fork, an unrecognized source, and
-// the watchdog's 'unknown') reads instead of re-deriving.
+// 'off'. `fork` is handled in its own branch in run() (always 'off' unless
+// this exact session_id already has state, never the configured default).
+// Everything else (compact, resume, an unrecognized source, and the
+// watchdog's 'unknown') reads instead of re-deriving.
 const RESET_SOURCES = new Set(['startup', 'clear']);
 // Of the RESET_SOURCES, `clear` forces 'off' rather than re-deriving the
 // configured default (DONGWOO-2104 session-state contract: "/clear: 해당
@@ -266,17 +269,42 @@ if (process.stdin.isTTY) {
 }
 
 function run(source, sessionCwd, sessionId) {
+// DONGWOO-2104 session-state contract: "session_id 누락·형식 오류: fail-closed
+// off; mode state를 쓰지 않고 ... style context를 주입하지 않는다" — unconditional,
+// not just for the write. Must sit before EVERY read/GC/log below: an invalid
+// session_id getting as far as getDefaultMode/gcSessionStore/recordModeChange
+// is itself a side effect this guards against, not only the persisted flag.
+if (!sessionId) {
+  process.exit(0);
+  return;
+}
+
 let mode;
-if (RESET_SOURCES.has(source)) {
+if (source === 'fork') {
+  // DONGWOO-2104 fork-isolation contract: a forked session always gets a
+  // brand-new session_id, so nothing is ever already stored for it. The
+  // generic continuation branch's "nothing stored -> getDefaultMode()" would
+  // hand a fork child whatever mode this environment's configured default
+  // resolves to (e.g. CAVEMAN_DEFAULT_MODE=lite) — silently inheriting a
+  // non-off mode despite the parent session being untouched. A fork child is
+  // 'off' unless something is actually stored under its OWN session_id,
+  // never re-derived from the configured default.
+  const stored = readSessionModeRaw(claudeDir, sessionId);
+  mode = (stored && VALID_MODES.includes(stored)) ? stored : 'off';
+} else if (RESET_SOURCES.has(source)) {
   if (RESET_TO_OFF_SOURCES.has(source)) {
     mode = 'off';
   } else {
     mode = getDefaultMode(sessionCwd);
   }
-  // Sweep stale per-session files only when a session genuinely begins, not on
-  // every compaction — those are frequent in a long session and this walks a
-  // directory inside a 5s hook budget.
-  gcSessionStore(claudeDir);
+  if (source === 'startup') {
+    // Sweep stale per-session files only on a genuine new session — not on
+    // every compaction (frequent, would spend the 5s budget inside a long
+    // session) and not on /clear either: clear resets ONE session's own
+    // mode, not the "a session begins" moment this directory-wide sweep
+    // exists for.
+    gcSessionStore(claudeDir);
+  }
 } else {
   // Continuation: read, never re-derive. The LITERAL value, so a stored 'off'
   // is distinguishable from "nothing stored yet". candidate-p2: no legacy
@@ -285,8 +313,9 @@ if (RESET_SOURCES.has(source)) {
   if (stored && VALID_MODES.includes(stored)) {
     mode = stored;
   } else {
-    // resume/fork can carry a session id we have never seen (a fork gets a new
-    // one). With nothing stored anywhere, fall back to the configured default.
+    // resume can carry a session id this install has never seen (never for
+    // fork — handled in its own branch above). With nothing stored anywhere,
+    // fall back to the configured default.
     mode = getDefaultMode(sessionCwd);
   }
 }
@@ -295,26 +324,30 @@ if (RESET_SOURCES.has(source)) {
 // "off: stdout 0 bytes / additionalContext 없음"). The state is still written
 // (best-effort) so the choice survives this session's later compactions.
 if (mode === 'off') {
-  recordModeChange(claudeDir, null, sessionId); // #601: timestamped transition log
   writeSessionMode(claudeDir, sessionId, null);
   process.exit(0);
 }
 
-// 1. Persist this session's mode (symlink-safe). candidate-p2 has no legacy
-//    mirror to write. writeSessionMode returns false when nothing was
-//    actually written (no valid session_id, or the write failed) — in that
-//    case we must not report the mode as active (no ruleset emitted), so a
-//    write failure never looks like a successful activation.
-recordModeChange(claudeDir, mode, sessionId); // #601
+// Persist this session's mode (symlink-safe). candidate-p2 has no legacy
+// mirror to write. writeSessionMode returns false when nothing was actually
+// written (the write failed — sessionId is already known valid at this
+// point) — in that case we must not report the mode as active (no ruleset
+// emitted), so a write failure never looks like a successful activation.
+//
+// No transition-log write here: nothing in this candidate reads
+// .caveman-mode-log.jsonl (caveman-stats, its only consumer, is not part of
+// the candidate-p2 package) — a log entry nobody reads is not a side effect
+// worth keeping, and skipping it avoids diffing recordModeChange's "before"
+// read against a value this same call is about to overwrite.
 const persisted = writeSessionMode(claudeDir, sessionId, mode);
 if (!persisted) {
   process.exit(0);
 }
 
-// 2. Emit the lite ruleset (the only non-off mode in this candidate), filtered
-//    from SKILL.md — the single source of truth for caveman behavior.
-//    Reads SKILL.md at runtime so edits to the source of truth propagate
-//    automatically — no hardcoded duplication to go stale.
+// Emit the lite ruleset (the only non-off mode in this candidate), filtered
+// from SKILL.md — the single source of truth for caveman behavior. Reads
+// SKILL.md at runtime so edits to the source of truth propagate automatically
+// — no hardcoded duplication to go stale.
 const canonicalModeLabel = cfg.canonicalModeLabel || ((m) => m);
 const rulesetBanner = cfg.rulesetBanner || ((m) => 'CAVEMAN MODE ACTIVE — level: ' + canonicalModeLabel(m));
 const loadFilteredRuleset = cfg.loadFilteredRuleset || (() => null);
@@ -336,8 +369,8 @@ if (skillContent) {
     'Default style for this whole session, every response, until user says "stop caveman" or "normal mode".\n\n' +
     'Current level: **' + modeLabel + '**. Switch: `/caveman lite|off`.\n\n' +
     '## Rules\n\n' +
-    'No filler, hedging, or pleasantries. Keep articles and full sentences OK, but stay tight. ' +
-    'Technical terms, code, commands, paths, and errors stay exact.\n\n' +
+    'Cut redundant wording and rote greetings only. Keep uncertainty, negation/exceptions, verification status, and needed progress updates. ' +
+    'Keep articles and full sentences. Technical terms, code, commands, paths, and errors stay exact.\n\n' +
     "Follow explicit reply-language instructions from the user or project. Otherwise preserve the user's dominant language. Technical terms, code, API names, commands, error strings stay verbatim.\n\n" +
     '## Boundaries\n\n' +
     'Code/commits/PRs: write normal. "stop caveman" or "normal mode": revert. Level persists until changed or session end.';
