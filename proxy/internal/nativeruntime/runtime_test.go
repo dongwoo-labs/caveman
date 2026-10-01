@@ -281,6 +281,17 @@ func TestTaskContractStartsNewGeneralTaskAndRefreshesGoalIdentity(t *testing.T) 
 	runtime := New(store)
 	session := Session{ID: "task-boundary", RepositoryState: "git:abc"}
 
+	initial, err := runtime.Handle(context.Background(), Request{
+		ProtocolVersion: 1, PolicyMode: "safe", Profile: "ledger", Agent: Agent{ID: "claude"}, Session: session,
+		Event: Event{Type: "prompt.submit"}, TaskProfile: &TaskProfile{Type: "general"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initial.Context != "" {
+		t.Fatalf("first Core task emitted context without a prior overlay: %q", initial.Context)
+	}
+
 	_, err = runtime.Handle(context.Background(), Request{
 		ProtocolVersion: 1, PolicyMode: "safe", Agent: Agent{ID: "claude"}, Session: session,
 		Event: Event{Type: "prompt.submit"}, Prompt: &PayloadDigest{Bytes: 10, SHA256: "sha256:migration"},
@@ -671,7 +682,7 @@ func TestExperimentProfilesToggleRealRuntimeMechanisms(t *testing.T) {
 			prompt, err := runtime.Handle(context.Background(), Request{
 				ProtocolVersion: 1, PolicyMode: "safe", Profile: tc.profile,
 				Agent: Agent{ID: "claude"}, Session: session, Event: Event{Type: "prompt.submit"},
-				Prompt: &PayloadDigest{Bytes: 8, SHA256: "sha256:profile"}, TaskProfile: &TaskProfile{Type: "feature"},
+				Prompt: &PayloadDigest{Bytes: 8, SHA256: "sha256:profile"}, TaskProfile: &TaskProfile{Type: "refactor"},
 			})
 			if err != nil {
 				t.Fatal(err)
