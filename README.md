@@ -177,7 +177,7 @@ The full 30+ agent matrix, dry runs, flags, and verification live in [INSTALL.md
 1. **Ask it something.** Any coding question. Watch the preamble vanish and the answer stay.
 2. **Turn the dial.** `/caveman lite` for tight-but-polite. `/caveman ultra` for grunts. `/caveman wenyan` for classical Chinese, because someone asked.
 3. **Commit like a caveman.** `/caveman-commit` writes a Conventional Commit in one line.
-4. **Review like a caveman.** `/caveman-review`는 `review-diff` 한 번에 간결한 문체 기준을 적용합니다. 별도 `review-diff`가 필요합니다. 추가 reviewer는 없습니다.
+4. **Review like a caveman.** `/caveman-review`는 `review-diff` 한 번에 간결한 문체 기준을 적용합니다. 설치된 harness의 `review-diff` target이 필요합니다. 추가 reviewer는 없습니다.
 5. **Shrink your memory files.** `/caveman-compress CLAUDE.md` cuts the prose, keeps every heading, path, and command, and backs up the original.
 6. **Come home.** Say `stop caveman`. Normal prose returns. No hard feelings.
 

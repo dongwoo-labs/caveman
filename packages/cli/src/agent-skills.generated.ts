@@ -52,7 +52,7 @@ export const AGENT_SKILL_METADATA: AgentSkillMetadata[] = [
   },
   {
     "id": "caveman-explore",
-    "summary": "Explicit T1 localization compatibility through direct search or one built-in Explore call.",
+    "summary": "직접 검색 또는 built-in Explore 한 번을 통한 T1 명시 위치 탐색 호환.",
     "delivery": [
       "cli"
     ],

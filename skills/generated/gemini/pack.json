@@ -40,7 +40,7 @@
   "skills": [
     {
       "id": "investigate-first",
-      "summary": "Explicit T1 diagnosis compatibility through diagnose-bug general mode.",
+      "summary": "diagnose-bug 일반 모드를 통한 T1 명시 진단 호환.",
       "activation": "explicit",
       "task_types": [
         "investigation"
@@ -59,7 +59,7 @@
     },
     {
       "id": "lean-build",
-      "summary": "Explicit T1 direct implementation compatibility; retained for core-lean-build.",
+      "summary": "T1 명시 직접 구현 호환. core-lean-build를 위해 보존.",
       "activation": "explicit",
       "task_types": [
         "feature"
@@ -118,7 +118,7 @@
     },
     {
       "id": "surgical-patch",
-      "summary": "Explicit T1 minimal-fix compatibility owned by the current writer.",
+      "summary": "현재 writer가 맡는 T1 명시 최소 수정 호환.",
       "activation": "explicit",
       "task_types": [
         "bugfix"
@@ -137,7 +137,7 @@
     },
     {
       "id": "verify-and-stop",
-      "summary": "Explicit T1 direct verification compatibility with user-journey E2E boundaries.",
+      "summary": "사용자 여정 E2E 경계를 보존하는 T1 명시 직접 검증 호환.",
       "activation": "explicit",
       "task_types": [
         "verification"

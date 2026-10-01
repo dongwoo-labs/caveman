@@ -27,7 +27,7 @@ Mode stick until changed or session end.
 | Skill | Trigger | What it do |
 |-------|---------|-----------|
 | **caveman-commit** | `/caveman-commit` | Terse commit messages. Conventional Commits. ≤50 char subject. |
-| **caveman-review** | `/caveman-review` | One-line PR comments: `L42: bug: user null. Add guard.` |
+| **caveman-review** | `/caveman-review` | 명시 호출 전용. 설치된 harness의 review-diff 한 번에 간결한 문체 기준 적용. |
 | **caveman-compress** | `/caveman-compress <file>` | Compress .md files to caveman prose. Saves ~46% input tokens. |
 | **caveman-help** | `/caveman-help` | This card. |
 
