@@ -1,16 +1,17 @@
 ---
 name: surgical-patch
-description: Fix bugs and small behavior changes at the narrowest responsible layer. Use when regression proof, preserved surrounding behavior, and task-relevant tests matter.
+description: Explicit compatibility entry for surgical-patch. Apply minimal-fix criteria in the current writer; not an independent procedure or automatic routing target.
+disable-model-invocation: true
 ---
 
-# Surgical patch
+# Surgical patch compatibility
 
-Reproduce failure first when economical; otherwise capture strongest available evidence.
+Keep this name for explicit calls during T1. The current writer owns the fix under the project's engineering and Ponytail guidance.
 
-- Trace symptom to responsible mechanism.
-- Change narrowest layer that owns incorrect behavior.
-- Preserve unrelated behavior and user changes.
-- Avoid cleanup, renaming, and abstraction outside fix.
-- Add only regression proof relevant to task.
+- Establish representative failure evidence and trace the responsible mechanism before editing.
+- Change the narrowest responsible layer; preserve user changes and unrelated behavior. No opportunistic cleanup or abstraction.
+- Apply the smallest runnable regression proof and required checks. Rerun the original user scenario; use E2E for a user journey.
+- Fix directly by default. Only use patch-bug when a separate context is useful, available, and permitted for an already-diagnosed narrow edit. Do not require an extra Agent or chain diagnosis, patch, and review calls.
+- Missing delegation target blocks only that delegation; never claim it ran. Report unavailable acceptance evidence honestly.
 
-Run focused proof plus nearest affected gate. Stop when failure is fixed and regression proof passes.
+Stop when the requested fix and relevant checks are complete. This entry grants no publication, installation, deployment, or cleanup authority.

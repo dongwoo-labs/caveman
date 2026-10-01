@@ -91,7 +91,7 @@ for (const raw of registry.skills) {
 	const native = meta.delivery.includes("native");
 	const nativeKeys = ["activation", "task_types", "evidence_status", "prompt_byte_budget", "conflicts", "precedence", "guardrails", "entry_condition", "stop_condition"];
 	if (native) {
-		if (meta.activation !== "classified") die(`${meta.id}: native activation must be classified`);
+		if (!["classified", "explicit"].includes(meta.activation)) die(`${meta.id}: native activation must be classified or explicit`);
 		if (!Array.isArray(meta.task_types) || meta.task_types.length === 0 || meta.task_types.some((value) => typeof value !== "string" || !/^[a-z0-9-]+$/.test(value))) die(`${meta.id}: native task_types invalid`);
 		if (typeof meta.evidence_status !== "string" || meta.evidence_status.trim() === "") die(`${meta.id}: native evidence_status required`);
 		if (!Number.isInteger(meta.prompt_byte_budget) || meta.prompt_byte_budget < 1) die(`${meta.id}: native prompt_byte_budget invalid`);

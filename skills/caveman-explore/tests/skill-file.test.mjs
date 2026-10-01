@@ -13,25 +13,25 @@ function frontmatter(text) {
   return match[1];
 }
 
-test("frontmatter name matches directory and declares read-only cheap explorer", () => {
+test("frontmatter preserves the explicit compatibility name without a separate agent preset", () => {
   const fm = frontmatter(md);
   assert.match(fm, /^name:\s*caveman-explore\s*$/m, "name must be caveman-explore");
-  assert.match(fm, /^model:\s*haiku\s*$/m, "explorer must run on cheap model");
-  assert.match(fm, /^tools:\s*Read,\s*Glob,\s*Grep\s*$/m, "tools must be exactly three read-only tools");
-  assert.doesNotMatch(fm, /\b(Edit|Write|Bash|NotebookEdit)\b/, "explorer must not have write or execution tools");
-  assert.match(fm, /^description:\s*.+/m, "description required for auto-delegation");
+  assert.match(fm, /^disable-model-invocation:\s*true\s*$/m, "entry must not auto-activate");
+  assert.doesNotMatch(fm, /^(model|tools):/m, "compatibility must not define another scout preset");
+  assert.match(fm, /^description:\s*.+/m, "description required for explicit discovery");
 });
 
-test("description says when to invoke and skip", () => {
+test("description limits invocation to direct search or one built-in Explore", () => {
   const fm = frontmatter(md);
-  assert.match(fm, /cold-start|cross-file|localization|search has failed/i, "must say when to invoke");
-  assert.match(fm, /skip/i, "must say when to skip");
+  assert.match(fm, /Explicit T1 compatibility/, "must declare compatibility status");
+  assert.match(fm, /direct read-only search or one built-in Explore call/, "must name the canonical localization paths");
 });
 
-test("body mandates parallel calls and citation-only reply", () => {
-  assert.match(md, /IN PARALLEL/i, "must mandate parallel tool calls");
-  assert.match(md, /ONLY an evidence block|only.*citation/i, "must mandate citation-only reply");
-  assert.match(md, /path\/to\/file\.ext:START-END/i, "must show compact path:line shape");
+test("body forbids duplicate scouts and preserves observed citations", () => {
+  assert.match(md, /Do not add a FastContext scout, parallel scouts/, "must forbid duplicate scouts");
+  assert.match(md, /Return only observed locations/, "must retain evidence-only return");
+  assert.match(md, /path:START-END/i, "must show compact path:line shape");
+  assert.match(md, /Cite ranges actually read/, "must not fabricate citations");
   assert.match(md, /no relevant locations found/i, "must give honest empty fallback");
   assert.match(md, /never edit|never.*solve|read-only/i, "must forbid editing and solving");
 });

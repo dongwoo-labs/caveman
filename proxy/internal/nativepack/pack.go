@@ -77,6 +77,9 @@ func Select(taskType string) (Skill, bool) {
 	var selected Skill
 	found := false
 	for _, skill := range pack.Skills {
+		if skill.Activation != "classified" {
+			continue
+		}
 		for _, candidate := range skill.TaskTypes {
 			if candidate == taskType {
 				if !found || skill.Precedence > selected.Precedence {
@@ -98,7 +101,7 @@ func validate(pack Pack) error {
 	owners := map[string][]Skill{}
 	ids := map[string]bool{}
 	for _, skill := range pack.Skills {
-		if skill.ID == "" || ids[skill.ID] || skill.Activation != "classified" || skill.Instructions == "" || len(skill.Instructions) > skill.PromptByteBudget {
+		if skill.ID == "" || ids[skill.ID] || (skill.Activation != "classified" && skill.Activation != "explicit") || skill.Instructions == "" || len(skill.Instructions) > skill.PromptByteBudget {
 			return fmt.Errorf("native pack: invalid skill %q", skill.ID)
 		}
 		ids[skill.ID] = true

@@ -177,7 +177,7 @@ The full 30+ agent matrix, dry runs, flags, and verification live in [INSTALL.md
 1. **Ask it something.** Any coding question. Watch the preamble vanish and the answer stay.
 2. **Turn the dial.** `/caveman lite` for tight-but-polite. `/caveman ultra` for grunts. `/caveman wenyan` for classical Chinese, because someone asked.
 3. **Commit like a caveman.** `/caveman-commit` writes a Conventional Commit in one line.
-4. **Review like a caveman.** `/caveman-review` gives one finding per line: `L42: 🔴 null deref. Guard it.`
+4. **Review like a caveman.** `/caveman-review`는 `review-diff` 한 번에 간결한 문체 기준을 적용합니다. 별도 `review-diff`가 필요합니다. 추가 reviewer는 없습니다.
 5. **Shrink your memory files.** `/caveman-compress CLAUDE.md` cuts the prose, keeps every heading, path, and command, and backs up the original.
 6. **Come home.** Say `stop caveman`. Normal prose returns. No hard feelings.
 
@@ -346,14 +346,16 @@ Three things the skill will never do: shorten your code, paraphrase an error mes
 | Tool / command                                                                                                                                  | What you get                                                                                                                |
 | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `/caveman [lite\|full\|ultra\|wenyan-lite\|wenyan-full\|wenyan-ultra\|off]`                                                                     | Shorter replies at the intensity you choose.                                                                                |
-| `cavecrew-investigator`, `cavecrew-builder`, `cavecrew-reviewer`                                                                                | Compressed subagent presets for locating, editing, and reviewing code.                                                      |
+| `cavecrew-investigator`, `cavecrew-builder`, `cavecrew-reviewer`                                                                                | T1 명시 호출 호환 agent. 위치 검색, 1-2 파일 수정, findings-only 계약 유지. 중첩 위임 없음.                                                      |
 | `/caveman-commit`                                                                                                                               | Terse Conventional Commit messages.                                                                                         |
-| `/caveman-review`                                                                                                                               | One-line, actionable review findings.                                                                                       |
+| `/caveman-review`                                                                                                                               | 명시 호출 전용. review-diff 한 번과 간결한 문체 기준. 별도 target 없으면 위임 BLOCKED.                                                                                       |
 | `/caveman-compress <file>`                                                                                                                      | Smaller Markdown memory files, with the original backed up.                                                                 |
 | `/caveman-stats`                                                                                                                                | Recorded Claude Code token usage; savings unknown without a measured comparison.                                            |
 | `/caveman-help`                                                                                                                                 | One-screen reminder of every mode and command.                                                                              |
-| `investigate-first`, `lean-build`, `surgical-patch`, `safe-refactor`, `migration`, `verify-and-stop`                                            | Work patterns that write less code, so the agent bills fewer tokens. Your agent picks these up on its own when a task fits. |
-| `/caveman-setup`, `/caveman-discover`, `/caveman-learn`, `/caveman-manage`, `/caveman-optimize`, `/caveman-explore`, `/caveman-evidence-review` | Drive the caveman engine and proxy: set it up, find where tokens go, act on what it finds.                                  |
+| `investigate-first`, `lean-build`, `surgical-patch`, `verify-and-stop` | T1 명시 호출 호환 entry. 일반 모드 diagnose-bug, 현재 writer의 직접 구현·수정·검증으로 정렬. 자동 native 선택 없음. |
+| `safe-refactor`, `migration` | 기존 동작 보존 리팩터링과 호환성 전환 절차 유지. |
+| `/cavecrew`, `/caveman-explore` | 요청한 경로 하나만 선택. 직접 검색 또는 Explore 한 번. 자동 연쇄·병렬 scout 없음. |
+| `/caveman-setup`, `/caveman-discover`, `/caveman-learn`, `/caveman-manage`, `/caveman-optimize`, `/caveman-evidence-review` | Drive the caveman engine and proxy: set it up, find where tokens go, act on what it finds.                                  |
 
 </details>
 
@@ -427,7 +429,7 @@ caveman learn implement   # hand the fixes to Claude Code or Codex, one diff at 
 ### More verbs
 
 ```bash
-caveman explore install         # read-only FastContext subagent: finds code as path:line
+caveman explore install         # T1 호환 entry: 직접 검색 또는 Explore 한 번
 caveman shrink -- pnpm test     # compress noisy command output, byte-exact recoverable
 caveman browse <url>            # local Chrome over a compressed a11y tree
 caveman mem remember|recall     # durable memory; `mem recover <handle>` = original bytes

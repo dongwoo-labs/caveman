@@ -41,8 +41,8 @@ export const NATIVE_PACK = {
   "skills": [
     {
       "id": "investigate-first",
-      "summary": "Gather evidence and establish a credible mechanism before editing.",
-      "activation": "classified",
+      "summary": "Explicit T1 diagnosis compatibility through diagnose-bug general mode.",
+      "activation": "explicit",
       "task_types": [
         "investigation"
       ],
@@ -56,12 +56,12 @@ export const NATIVE_PACK = {
       ],
       "entry_condition": "cause is ambiguous",
       "stop_condition": "cause or exact blocker is evidence-backed",
-      "instructions": "# Investigate first\n\nGather evidence before changing product code.\n\n- Separate observed symptom from inferred cause.\n- Trace inputs, state transitions, ownership boundaries, and failure output.\n- Rank hypotheses by evidence and cheap falsification value.\n- Do not edit until one credible mechanism explains evidence.\n- Stop exploration when evidence is sufficient to name cause or exact blocker.\n\nReport cause and proof. Make no fix unless task authorizes implementation."
+      "instructions": "# Investigation compatibility\n\nOnly an explicit call activates this entry. Use one diagnose-bug call in general mode with the symptom and available evidence. Request diagnosis only, no edits; return hypotheses, evidence, uncertainty, and the exact blocker. Do not start a fix or review chain.\n\nGeneral-mode request: 일반 모드로 진행해줘. <코드/로그/증거>를 바탕으로 <증상>을 진단하고, 가설과 불확실성을 반환해줘.\n\nDo not invent a mode flag or assume the installed target matches an accepted source revision. If diagnose-bug or its general-mode contract is unavailable, report that dependency as blocked. Never claim delegation or model compliance was verified."
     },
     {
       "id": "lean-build",
-      "summary": "Deliver narrow complete feature outcomes with architectural fit on top of mandatory simplicity Core.",
-      "activation": "classified",
+      "summary": "Explicit T1 direct implementation compatibility; retained for core-lean-build.",
+      "activation": "explicit",
       "task_types": [
         "feature"
       ],
@@ -76,7 +76,7 @@ export const NATIVE_PACK = {
       ],
       "entry_condition": "task adds product behavior",
       "stop_condition": "focused acceptance proof passes",
-      "instructions": "# Lean build\n\nNative Core's architecture-first simplicity remains mandatory. Turn feature into complete narrow outcome fitting system.\n\n- Derive observable acceptance and explicit non-goals from request and repository.\n- Trace entry point through layers owning invariants.\n- Deliver coherent end-to-end path across responsible layers; never force work into one file, direct expression, or local patch.\n- Reuse fitting seam. Refactor when patching duplicates behavior, weakens ownership, or hides root cause.\n- Omit modes, providers, config, extensibility, and polish unless acceptance needs them.\n- Add surface, dependency, service, config, or migration only for lifecycle design or acceptance; state material tradeoff.\n- Keep work runnable; preserve Core safety.\n\nExercise path. Run focused proof. Stop when acceptance passes. Report only material omissions and trigger."
+      "instructions": "# Lean build compatibility\n\nThe current writer implements directly under the project's engineering and Ponytail guidance. Native Core remains mandatory, including in the explicitly selected core-lean-build profile.\n\n- Establish observable acceptance and non-goals; trace the layers owning the behavior.\n- Reuse existing code, standard libraries, native capabilities, and installed dependencies before adding a layer.\n- Deliver the smallest complete outcome. Preserve correctness, safety, and unrelated work; omit speculative extensibility and polish.\n- Run representative acceptance proof and required checks. Stop when the requested outcome is verified.\n\nDo not require an extra builder, scout, or review chain. This entry grants no publication, installation, or deployment authority."
     },
     {
       "id": "migration",
@@ -119,13 +119,13 @@ export const NATIVE_PACK = {
     },
     {
       "id": "surgical-patch",
-      "summary": "Fix the narrowest responsible layer with regression proof.",
-      "activation": "classified",
+      "summary": "Explicit T1 minimal-fix compatibility owned by the current writer.",
+      "activation": "explicit",
       "task_types": [
         "bugfix"
       ],
       "evidence_status": "structural-test-only",
-      "prompt_byte_budget": 850,
+      "prompt_byte_budget": 1500,
       "conflicts": [],
       "precedence": 100,
       "guardrails": [
@@ -134,12 +134,12 @@ export const NATIVE_PACK = {
       ],
       "entry_condition": "task fixes incorrect behavior",
       "stop_condition": "failure is fixed and regression proof passes",
-      "instructions": "# Surgical patch\n\nReproduce failure first when economical; otherwise capture strongest available evidence.\n\n- Trace symptom to responsible mechanism.\n- Change narrowest layer that owns incorrect behavior.\n- Preserve unrelated behavior and user changes.\n- Avoid cleanup, renaming, and abstraction outside fix.\n- Add only regression proof relevant to task.\n\nRun focused proof plus nearest affected gate. Stop when failure is fixed and regression proof passes."
+      "instructions": "# Surgical patch compatibility\n\nKeep this name for explicit calls during T1. The current writer owns the fix under the project's engineering and Ponytail guidance.\n\n- Establish representative failure evidence and trace the responsible mechanism before editing.\n- Change the narrowest responsible layer; preserve user changes and unrelated behavior. No opportunistic cleanup or abstraction.\n- Apply the smallest runnable regression proof and required checks. Rerun the original user scenario; use E2E for a user journey.\n- Fix directly by default. Only use patch-bug when a separate context is useful, available, and permitted for an already-diagnosed narrow edit. Do not require an extra Agent or chain diagnosis, patch, and review calls.\n- Missing delegation target blocks only that delegation; never claim it ran. Report unavailable acceptance evidence honestly.\n\nStop when the requested fix and relevant checks are complete. This entry grants no publication, installation, deployment, or cleanup authority."
     },
     {
       "id": "verify-and-stop",
-      "summary": "Run the smallest sufficient proof set and stop without scope growth.",
-      "activation": "classified",
+      "summary": "Explicit T1 direct verification compatibility with user-journey E2E boundaries.",
+      "activation": "explicit",
       "task_types": [
         "verification"
       ],
@@ -153,16 +153,16 @@ export const NATIVE_PACK = {
       ],
       "entry_condition": "task asks for proof or completion validation",
       "stop_condition": "acceptance proof is complete",
-      "instructions": "# Verify and stop\n\nTranslate acceptance conditions into smallest sufficient proof set.\n\n- Reuse still-current results with matching repository state.\n- Run focused checks before wider gates.\n- Distinguish pass, fail, unavailable, and blocked exactly.\n- Do not edit product code unless verification request includes fixes.\n- Do not add polish, cleanup, or unrelated tests after criteria pass.\n\nStop immediately when acceptance proof is complete. Report commands, results, and unresolved risk only."
+      "instructions": "# Verification compatibility\n\nRun simple checks directly in the current writer. Reuse current evidence only when its revision and environment match. Keep required build, lint, type, and security checks.\n\nFor a user journey, follow the project's E2E acceptance standard: observe the real path, assert meaningful outcomes, and include visual evidence where applicable. Use e2e-verify only when available and permitted; do not invent an acceptance result when it is unavailable.\n\nReport exact commands, revision, environment, outcomes, mocks, and untested boundaries. Distinguish PASS, FAIL, BLOCKED, and NOT_RUN. Do not edit product code unless fixes are authorized. Stop when the assigned proof is complete; do not add a review or implementation chain."
     }
   ]
 } as const;
 export const NATIVE_CORE = "Build simplest complete system. Trace behavior and invariants before editing. System, user, and repository instructions outrank this default.\n\nConsider in order; accept first with correctness and architectural fit without distortion:\n1. Required behavior already exists: reuse it or change nothing.\n2. Responsible layer, type, helper, or pattern owns it: extend there.\n3. Standard library, native platform, browser, database, runtime, or installed dependency owns it: use it.\n4. Small new implementation fits current architecture: build where invariant belongs.\n5. Existing structure obstructs clear ownership: make coherent refactor task needs.\n\nOptimize total system complexity, clarity, and ownership—not lines or files changed. Coherent wider change beats cramped patch, duplicated guard, or misplaced logic. Reuse fitting abstractions; do not contort code to avoid abstraction. Prefer consolidation. Fix root cause.\n\nAvoid speculative features and extension points, single-implementation interfaces, configuration for fixed values, premature services, and imagined scaffolding. Dependency or public surface is valid for correct design or lower lifecycle cost; explain material tradeoff.\n\nSimplicity never removes trust-boundary validation, authorization, security, data-loss prevention, error handling, accessibility, migration or rollback safety, concurrency protection, compatibility, required tests, or explicitly requested behavior. Ask only for material public, security, data, billing, or hard-to-reverse choices.\n\nRun smallest sufficient proof. Report material changes, proof, unresolved risks, and only material omissions. Stop when task is satisfied.";
 export const NATIVE_SKILL_INSTRUCTIONS: Record<string, string> = {
-  "investigate-first": "# Investigate first\n\nGather evidence before changing product code.\n\n- Separate observed symptom from inferred cause.\n- Trace inputs, state transitions, ownership boundaries, and failure output.\n- Rank hypotheses by evidence and cheap falsification value.\n- Do not edit until one credible mechanism explains evidence.\n- Stop exploration when evidence is sufficient to name cause or exact blocker.\n\nReport cause and proof. Make no fix unless task authorizes implementation.",
-  "lean-build": "# Lean build\n\nNative Core's architecture-first simplicity remains mandatory. Turn feature into complete narrow outcome fitting system.\n\n- Derive observable acceptance and explicit non-goals from request and repository.\n- Trace entry point through layers owning invariants.\n- Deliver coherent end-to-end path across responsible layers; never force work into one file, direct expression, or local patch.\n- Reuse fitting seam. Refactor when patching duplicates behavior, weakens ownership, or hides root cause.\n- Omit modes, providers, config, extensibility, and polish unless acceptance needs them.\n- Add surface, dependency, service, config, or migration only for lifecycle design or acceptance; state material tradeoff.\n- Keep work runnable; preserve Core safety.\n\nExercise path. Run focused proof. Stop when acceptance passes. Report only material omissions and trigger.",
+  "investigate-first": "# Investigation compatibility\n\nOnly an explicit call activates this entry. Use one diagnose-bug call in general mode with the symptom and available evidence. Request diagnosis only, no edits; return hypotheses, evidence, uncertainty, and the exact blocker. Do not start a fix or review chain.\n\nGeneral-mode request: 일반 모드로 진행해줘. <코드/로그/증거>를 바탕으로 <증상>을 진단하고, 가설과 불확실성을 반환해줘.\n\nDo not invent a mode flag or assume the installed target matches an accepted source revision. If diagnose-bug or its general-mode contract is unavailable, report that dependency as blocked. Never claim delegation or model compliance was verified.",
+  "lean-build": "# Lean build compatibility\n\nThe current writer implements directly under the project's engineering and Ponytail guidance. Native Core remains mandatory, including in the explicitly selected core-lean-build profile.\n\n- Establish observable acceptance and non-goals; trace the layers owning the behavior.\n- Reuse existing code, standard libraries, native capabilities, and installed dependencies before adding a layer.\n- Deliver the smallest complete outcome. Preserve correctness, safety, and unrelated work; omit speculative extensibility and polish.\n- Run representative acceptance proof and required checks. Stop when the requested outcome is verified.\n\nDo not require an extra builder, scout, or review chain. This entry grants no publication, installation, or deployment authority.",
   "migration": "# Migration\n\nMap current readers, writers, data shape, compatibility window, and ownership before editing.\n\n- Define forward path and rollback path.\n- Preserve existing data; make destructive steps explicit and separately authorized.\n- Keep mixed-version operation safe where rollout can overlap.\n- Sequence expand, migrate, verify, then contract when applicable.\n- Make retries idempotent and partial failure observable.\n- Verify old and new paths at required transition stages.\n\nStop after requested stage passes; do not perform later destructive contraction implicitly.",
   "safe-refactor": "# Safe refactor\n\nDefine behavior-preservation boundary and establish verification before structural edits.\n\n- Keep feature changes outside refactor.\n- Move one ownership boundary at a time.\n- Preserve public interfaces, failure behavior, ordering, and compatibility unless explicitly scoped.\n- Keep intermediate states buildable and testable.\n- Avoid dependency or configuration growth without correctness need.\n\nRun same proof after change. Stop when behavior matches and requested structure is achieved.",
-  "surgical-patch": "# Surgical patch\n\nReproduce failure first when economical; otherwise capture strongest available evidence.\n\n- Trace symptom to responsible mechanism.\n- Change narrowest layer that owns incorrect behavior.\n- Preserve unrelated behavior and user changes.\n- Avoid cleanup, renaming, and abstraction outside fix.\n- Add only regression proof relevant to task.\n\nRun focused proof plus nearest affected gate. Stop when failure is fixed and regression proof passes.",
-  "verify-and-stop": "# Verify and stop\n\nTranslate acceptance conditions into smallest sufficient proof set.\n\n- Reuse still-current results with matching repository state.\n- Run focused checks before wider gates.\n- Distinguish pass, fail, unavailable, and blocked exactly.\n- Do not edit product code unless verification request includes fixes.\n- Do not add polish, cleanup, or unrelated tests after criteria pass.\n\nStop immediately when acceptance proof is complete. Report commands, results, and unresolved risk only."
+  "surgical-patch": "# Surgical patch compatibility\n\nKeep this name for explicit calls during T1. The current writer owns the fix under the project's engineering and Ponytail guidance.\n\n- Establish representative failure evidence and trace the responsible mechanism before editing.\n- Change the narrowest responsible layer; preserve user changes and unrelated behavior. No opportunistic cleanup or abstraction.\n- Apply the smallest runnable regression proof and required checks. Rerun the original user scenario; use E2E for a user journey.\n- Fix directly by default. Only use patch-bug when a separate context is useful, available, and permitted for an already-diagnosed narrow edit. Do not require an extra Agent or chain diagnosis, patch, and review calls.\n- Missing delegation target blocks only that delegation; never claim it ran. Report unavailable acceptance evidence honestly.\n\nStop when the requested fix and relevant checks are complete. This entry grants no publication, installation, deployment, or cleanup authority.",
+  "verify-and-stop": "# Verification compatibility\n\nRun simple checks directly in the current writer. Reuse current evidence only when its revision and environment match. Keep required build, lint, type, and security checks.\n\nFor a user journey, follow the project's E2E acceptance standard: observe the real path, assert meaningful outcomes, and include visual evidence where applicable. Use e2e-verify only when available and permitted; do not invent an acceptance result when it is unavailable.\n\nReport exact commands, revision, environment, outcomes, mocks, and untested boundaries. Distinguish PASS, FAIL, BLOCKED, and NOT_RUN. Do not edit product code unless fixes are authorized. Stop when the assigned proof is complete; do not add a review or implementation chain."
 };

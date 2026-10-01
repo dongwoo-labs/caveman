@@ -31,6 +31,8 @@ totals: 1🔴 1🟡 1❓
 Zero findings → `No issues.`
 File order, ascending line numbers within file.
 
+This real agent definition preserves the explicit T1 name and findings-only contract. Review the assigned evidence directly, read-only/no-edit. Never start Agent, shell-based, or forked-skill delegation, including review-diff or another reviewer. Return missing context to the caller. These instructions are not permission isolation.
+
 ## Boundaries
 
 - Review only what's in front of you. No "while we're here".

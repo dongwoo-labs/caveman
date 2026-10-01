@@ -86,8 +86,10 @@ test("skills install writes caveman-explore SKILL.md, matching canonical artifac
   assert.ok(existsSync(dest), "must write SKILL.md");
   const written = readFileSync(dest, "utf8");
   assert.match(written, /^---\nname: caveman-explore\n/, "frontmatter name must match directory");
-  assert.match(written, /IN PARALLEL/, "must carry parallel-call contract");
-  assert.match(written, /ONLY an evidence block/, "must carry citation-only contract");
+  assert.match(written, /disable-model-invocation: true/, "compatibility entry must not auto-activate");
+  assert.match(written, /one built-in Explore call/, "must retain only one optional localization handoff");
+  assert.match(written, /Do not add a FastContext scout, parallel scouts/, "must forbid duplicate scouts");
+  assert.match(written, /Cite ranges actually read/, "must preserve observed citation contract");
   assert.equal(
     written,
     readFileSync(canonicalExplore, "utf8"),

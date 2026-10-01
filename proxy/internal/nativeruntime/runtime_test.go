@@ -182,12 +182,12 @@ func TestTaskContractKeepsPolicyAcrossFollowupsAndInjectsOnlyOnPolicyChange(t *t
 		Session:         session,
 		Event:           Event{Type: "prompt.submit"},
 		Prompt:          &PayloadDigest{Bytes: 99, SHA256: "sha256:first"},
-		TaskProfile:     &TaskProfile{Type: "feature"},
+		TaskProfile:     &TaskProfile{Type: "refactor"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(first.Context, "dynamic tail") || !strings.Contains(first.Context, "policy=lean-build") || strings.Contains(first.Context, "sha256:first") {
+	if !strings.Contains(first.Context, "dynamic tail") || !strings.Contains(first.Context, "policy=safe-refactor") || strings.Contains(first.Context, "sha256:first") {
 		t.Fatalf("wrong bounded task context: %q", first.Context)
 	}
 	followup, err := runtime.Handle(context.Background(), Request{
@@ -212,7 +212,7 @@ func TestTaskContractKeepsPolicyAcrossFollowupsAndInjectsOnlyOnPolicyChange(t *t
 		Session:         session,
 		Event:           Event{Type: "prompt.submit"},
 		Prompt:          &PayloadDigest{Bytes: 102, SHA256: "sha256:third"},
-		TaskProfile:     &TaskProfile{Type: "feature"},
+		TaskProfile:     &TaskProfile{Type: "refactor"},
 	})
 	if err != nil {
 		t.Fatal(err)

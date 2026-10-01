@@ -1,16 +1,13 @@
 ---
 name: verify-and-stop
-description: Prove existing work meets acceptance conditions without expanding scope. Use for validation-only tasks, completion checks, focused gate runs, and last-mile proof.
+description: Explicit T1 compatibility entry for direct checks or user-journey E2E acceptance. Not an independent procedure or automatic routing target.
+disable-model-invocation: true
 ---
 
-# Verify and stop
+# Verification compatibility
 
-Translate acceptance conditions into smallest sufficient proof set.
+Run simple checks directly in the current writer. Reuse current evidence only when its revision and environment match. Keep required build, lint, type, and security checks.
 
-- Reuse still-current results with matching repository state.
-- Run focused checks before wider gates.
-- Distinguish pass, fail, unavailable, and blocked exactly.
-- Do not edit product code unless verification request includes fixes.
-- Do not add polish, cleanup, or unrelated tests after criteria pass.
+For a user journey, follow the project's E2E acceptance standard: observe the real path, assert meaningful outcomes, and include visual evidence where applicable. Use e2e-verify only when available and permitted; do not invent an acceptance result when it is unavailable.
 
-Stop immediately when acceptance proof is complete. Report commands, results, and unresolved risk only.
+Report exact commands, revision, environment, outcomes, mocks, and untested boundaries. Distinguish PASS, FAIL, BLOCKED, and NOT_RUN. Do not edit product code unless fixes are authorized. Stop when the assigned proof is complete; do not add a review or implementation chain.
