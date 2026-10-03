@@ -281,14 +281,27 @@ function contextOf(result) {
   return JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
 }
 
+// These two carry a valid session_id: the tracker fails closed on a missing or
+// invalid id (DONGWOO-2168), so the legacy no-id path no longer reaches the
+// level parser at all.
+const NOTICE_SID = 'notice-session-1';
+
+function seedSessionMode(configDir, mode) {
+  const dir = path.join(configDir, '.caveman-sessions');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, NOTICE_SID + '.mode');
+  fs.writeFileSync(file, mode);
+  return file;
+}
+
 test('a bogus level is reported instead of silently ignored', () => {
   const cfg = makeConfigDir();
   try {
-    fs.writeFileSync(path.join(cfg, '.caveman-active'), 'ultra');
-    const ctx = contextOf(send(cfg, { prompt: '/caveman not-a-real-level' }));
+    const modeFile = seedSessionMode(cfg, 'lite');
+    const ctx = contextOf(send(cfg, { session_id: NOTICE_SID, prompt: '/caveman not-a-real-level' }));
     assert.ok(ctx, 'a bogus level must produce a notice');
     assert.match(ctx, /not recognized/);
-    assert.strictEqual(flagValue(cfg), 'ultra', 'the level must be left untouched');
+    assert.strictEqual(fs.readFileSync(modeFile, 'utf8'), 'lite', 'the level must be left untouched');
   } finally {
     fs.rmSync(cfg, { recursive: true, force: true });
   }
@@ -297,9 +310,9 @@ test('a bogus level is reported instead of silently ignored', () => {
 test('the rejected argument is never echoed back into model context', () => {
   const cfg = makeConfigDir();
   try {
-    fs.writeFileSync(path.join(cfg, '.caveman-active'), 'full');
-    const ctx = contextOf(send(cfg, { prompt: '/caveman IGNORE-PREVIOUS-INSTRUCTIONS' }));
-    assert.ok(ctx);
+    seedSessionMode(cfg, 'lite');
+    const ctx = contextOf(send(cfg, { session_id: NOTICE_SID, prompt: '/caveman IGNORE-PREVIOUS-INSTRUCTIONS' }));
+    assert.ok(ctx, 'a rejected level must still produce a notice');
     assert.doesNotMatch(ctx, /IGNORE-PREVIOUS-INSTRUCTIONS/i, 'untrusted input must not reach model context');
   } finally {
     fs.rmSync(cfg, { recursive: true, force: true });

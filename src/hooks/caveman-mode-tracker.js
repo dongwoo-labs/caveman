@@ -68,11 +68,9 @@ function requireSibling(name, isUsable) {
 // pipe, #397).
 const cavemanConfig = requireSibling('caveman-config', (m) =>
   m && typeof m.getDefaultMode === 'function' && typeof m.safeWriteFlag === 'function'
-    && typeof m.readFlag === 'function' && typeof m.recordModeChange === 'function'
-    && Array.isArray(m.VALID_MODES));
-const { getDefaultMode, recordModeChange, VALID_MODES } = cavemanConfig || {
+    && typeof m.readFlag === 'function' && Array.isArray(m.VALID_MODES));
+const { getDefaultMode, VALID_MODES } = cavemanConfig || {
   getDefaultMode: () => 'off',
-  recordModeChange: () => {},
   VALID_MODES: ['off', 'lite'],
 };
 
@@ -130,8 +128,10 @@ function handle(raw) {
 
     // Scopes every read and write below to this session. null when absent or
     // malformed — candidate-p2 treats that as "no session", never a
-    // machine-wide fallback.
+    // machine-wide fallback, and stops here (DONGWOO-2168): no state read or
+    // write, no output, exit 0.
     const sessionId = validateSessionId(data.session_id);
+    if (!sessionId) return;
 
     // Collapse whitespace so phrase triggers still match multiline prompts —
     // every regex below sees a single-line prompt (#598).
@@ -200,20 +200,23 @@ function handle(raw) {
     // else (#975). A null previous mode (caveman was off) counts as a change:
     // the model holds no ruleset at all in that case, which is the strongest
     // reason to send one.
+    //
+    // Fail-closed (DONGWOO-2168): a state write that fails reports nothing — no
+    // switch, no ruleset, no reinforcement — so the model is never told a mode
+    // is in effect that the session store does not hold. The transition log
+    // (#601) is not written: candidate-p2 has no consumer for it.
     let switchedToLevel = null;
     if (change && change.action === 'set') {
       const mode = change.mode;
+      if (!writeSessionMode(claudeDir, sessionId, mode)) return;
       if (mode !== modeBeforeChange) {
         switchedToLevel = mode;
       }
-      recordModeChange(claudeDir, mode, sessionId); // #601: timestamped transition log
-      writeSessionMode(claudeDir, sessionId, mode);
     } else if (change && change.action === 'clear') {
       // Durable off: writeSessionMode stores the literal 'off' for this
       // session, so the next SessionStart cannot mistake deactivation for
       // "never set" and re-arm caveman on the next compaction.
-      recordModeChange(claudeDir, null, sessionId); // #601
-      writeSessionMode(claudeDir, sessionId, null);
+      if (!writeSessionMode(claudeDir, sessionId, null)) return;
     }
 
     // Per-turn reinforcement: emit a short reminder when caveman is active.
